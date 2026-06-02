@@ -479,111 +479,172 @@ gap = required_total - pension_total - ret_tax["実質手取り"]
 # ─────────────────────────────────────────
 st.markdown("## 💡 シミュレーション結果")
 
-c1, c2 = st.columns(2)
-with c1:
-    st.markdown(f"""
+# ── 総合サマリー（最上部）──
+st.markdown(f"""
 <div class="main-box">
-  <h2>🏆 引退時の退職金（実質手取り）</h2>
-  <div style="font-size:2rem; font-weight:900; color:#ffe066;">
+  <h2>🏆 引退時の総資産（手取りベース）</h2>
+  <div style="font-size:2.2rem; font-weight:900; color:#ffe066;">
     約{ret_tax["実質手取り"]/10000:,.0f}万円
   </div>
-  <div style="font-size:0.95rem; line-height:2.0; margin-top:8px;">
-    退職金総額：{retirement_total/10000:,.0f}万円<br>
-    　└ 法人保険：{total_surrender/10000:,.0f}万円　共済：{kyosai["受取概算額"]/10000:,.0f}万円<br>
-    　└ iDeCo：{ideco["積立総額（運用込）"]/10000:,.0f}万円　NISA：{nisa["積立総額（運用込・非課税）"]/10000:,.0f}万円<br>
-    　└ 預貯金：{total_savings/10000:,.0f}万円　個人保険：{total_personal_ins/10000:,.0f}万円<br>
-    退職所得控除：▼{ret_tax["退職所得控除額"]/10000:,.0f}万円<br>
-    税金合計：▼{ret_tax["税金合計"]/10000:,.0f}万円（実効税率 {ret_tax["実効税率"]:.1f}%）
+  <div style="font-size:0.95rem; line-height:1.9; margin-top:8px;">
+    資産総額：{retirement_total/10000:,.0f}万円　→　退職所得控除▼{ret_tax["退職所得控除額"]/10000:,.0f}万円　→　税金▼{ret_tax["税金合計"]/10000:,.0f}万円（実効税率{ret_tax["実効税率"]:.1f}%）
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-with c2:
+st.divider()
+
+# ══════════════════════════════════════════
+# 法人サイド ／ 個人サイド の2列表示
+# ══════════════════════════════════════════
+col_corp, col_divider, col_personal = st.columns([10, 1, 10])
+
+# ── 法人サイド ──
+with col_corp:
+    st.markdown("""
+<div style="background:#1a3a5c;color:white;border-radius:10px;
+padding:10px 18px;font-size:1.1rem;font-weight:bold;margin-bottom:16px;">
+🏢 法人の持ち物
+</div>
+""", unsafe_allow_html=True)
+
+    # 法人保険
+    st.markdown("**🏦 法人保険（解約返戻金）**")
+    for p in policies:
+        color = "#dbeafe" if "①" in p["出口戦略"] else "#dcfce7" if "②" in p["出口戦略"] else "#fef9c3"
+        st.markdown(f"""
+<div style="background:{color};border-radius:8px;padding:10px 14px;margin:6px 0;">
+  <strong>{p['名称']}</strong>（{p['種類']}）<br>
+  解約返戻金：<strong>{p['解約返戻金']/10000:,.0f}万円</strong>
+  死亡保険金：<strong>{p['死亡保険金']/10000:,.0f}万円</strong><br>
+  <span style="font-size:0.85rem;color:#555;">{p['出口戦略']}</span>
+</div>
+""", unsafe_allow_html=True)
+
     st.markdown(f"""
-<div class="main-box">
-  <h2>🛡️ 万が一の場合・相続対策</h2>
-  <div style="font-size:2rem; font-weight:900; color:#ffe066;">
-    死亡保険金合計 {total_death/10000:,.0f}万円
-  </div>
-  <div style="font-size:0.95rem; line-height:2.0; margin-top:8px;">
-    相続税非課税枠：{inheritance_exemption/10000:,.0f}万円（500万円×{num_heirs}人）<br>
-    非課税対象：最大{min(total_death, inheritance_exemption)/10000:,.0f}万円<br>
-    保険料総額：{total_ins_premium/10000:,.0f}万円　節税総額：{total_ins_tax/10000:,.0f}万円
-  </div>
+<div style="background:#f0f4ff;border-radius:8px;padding:10px 14px;margin:8px 0;">
+  法人保険 合計　解約返戻金：<strong>{total_surrender/10000:,.0f}万円</strong>
+  死亡保険金：<strong>{total_death/10000:,.0f}万円</strong>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("&nbsp;")
+
+    # 役員退職金
+    st.markdown("**🏆 役員退職金（適正額目安）**")
+    st.markdown(f"""
+<div style="background:#fff9e6;border-radius:8px;padding:10px 14px;margin:6px 0;">
+  最終報酬月額 {last_salary/10000:.0f}万円 × {years_as_director}年 × 功績倍率{multiplier}倍<br>
+  → <strong>{yakuin_amount/10000:,.0f}万円</strong>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("&nbsp;")
+
+    # 小規模企業共済（法人経営者向けだが個人名義。ここでは法人側に表示）
+    st.markdown("**🏛️ 小規模企業共済**")
+    st.markdown(f"""
+<div style="background:#f0f4ff;border-radius:8px;padding:10px 14px;margin:6px 0;">
+  掛金月額 {kyosai_monthly/10000:.1f}万円 × {kyosai_years}年<br>
+  受取見込：<strong>{kyosai["受取概算額"]/10000:,.0f}万円</strong>
+  節税総額：{kyosai["節税総額（概算）"]/10000:.0f}万円
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("&nbsp;")
+    corp_total = total_surrender + kyosai["受取概算額"]
+    st.markdown(f"""
+<div style="background:#1a3a5c;color:white;border-radius:8px;padding:12px 16px;margin-top:8px;">
+  🏢 法人サイド 合計（引退時受取）：<strong style="font-size:1.2rem;color:#ffe066;">
+  {corp_total/10000:,.0f}万円</strong>
+</div>
+""", unsafe_allow_html=True)
+
+# ── 区切り ──
+with col_divider:
+    st.markdown("""
+<div style="height:100%;border-left:2px dashed #dee2e6;margin:0 auto;width:0;min-height:600px;"></div>
+""", unsafe_allow_html=True)
+
+# ── 個人サイド ──
+with col_personal:
+    st.markdown("""
+<div style="background:#0d6efd;color:white;border-radius:10px;
+padding:10px 18px;font-size:1.1rem;font-weight:bold;margin-bottom:16px;">
+👤 個人の持ち物
+</div>
+""", unsafe_allow_html=True)
+
+    # iDeCo
+    st.markdown("**📈 iDeCo**")
+    st.markdown(f"""
+<div style="background:#f0fdf4;border-radius:8px;padding:10px 14px;margin:6px 0;">
+  月額 {ideco_monthly/10000:.1f}万円 × {ideco_years}年（利率{ideco_return}%）<br>
+  積立総額：<strong>{ideco["積立総額（運用込）"]/10000:,.0f}万円</strong>（運用益：{ideco["運用益"]/10000:.0f}万円）<br>
+  節税総額：{ideco["節税総額（概算）"]/10000:.0f}万円
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("&nbsp;")
+
+    # NISA
+    st.markdown("**📊 NISA（新NISA）**")
+    st.markdown(f"""
+<div style="background:#f0fdf4;border-radius:8px;padding:10px 14px;margin:6px 0;">
+  月額 {nisa_monthly/10000:.1f}万円 × {nisa_years}年（利率{nisa_return}%・{nisa_type}）<br>
+  積立総額：<strong>{nisa["積立総額（運用込・非課税）"]/10000:,.0f}万円</strong>（非課税運用益：{nisa["運用益（非課税）"]/10000:.0f}万円）<br>
+  節税効果（課税口座比）：{nisa["節税効果（通常課税比）"]/10000:.0f}万円
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("&nbsp;")
+
+    # 預貯金
+    st.markdown("**🏧 預貯金・現金資産**")
+    st.markdown(f"""
+<div style="background:#fffbeb;border-radius:8px;padding:10px 14px;margin:6px 0;">
+  現在残高：{savings_current/10000:,.0f}万円　＋　積立予定：{savings_annual/10000:.0f}万円×{savings_years}年<br>
+  引退時合計：<strong>{total_savings/10000:,.0f}万円</strong>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("&nbsp;")
+
+    # 個人保険
+    st.markdown("**🧑 個人保険**")
+    if personal_policies:
+        for p in personal_policies:
+            st.markdown(f"""
+<div style="background:#fffbeb;border-radius:8px;padding:10px 14px;margin:6px 0;">
+  <strong>{p['名称']}</strong>（{p['種類']}）<br>
+  受取見込：<strong>{p['受取見込額']/10000:,.0f}万円</strong>
+  {"　年金月額：" + f"{p['年金月額']:,}円" if p['年金月額'] > 0 else ""}
+</div>
+""", unsafe_allow_html=True)
+    else:
+        st.caption("なし")
+
+    st.markdown("&nbsp;")
+    personal_total = ideco["積立総額（運用込）"] + nisa["積立総額（運用込・非課税）"] + total_savings + total_personal_ins
+    st.markdown(f"""
+<div style="background:#0d6efd;color:white;border-radius:8px;padding:12px 16px;margin-top:8px;">
+  👤 個人サイド 合計（引退時受取）：<strong style="font-size:1.2rem;color:#ffe066;">
+  {personal_total/10000:,.0f}万円</strong>
 </div>
 """, unsafe_allow_html=True)
 
 st.divider()
 
-# ─────────────────────────────────────────
-# [2] 保険一覧サマリー
-# ─────────────────────────────────────────
-st.markdown("## 🏦 保険一覧")
-
-ins_df = pd.DataFrame([{
-    "保険名": p["名称"],
-    "種類": p["種類"],
-    "月額保険料": f"{p['月額']/10000:.1f}万円",
-    "払込年数": f"{p['払込年数']}年",
-    "解約返戻率": f"{p['返戻率']:.0f}%",
-    "解約返戻金": f"{p['解約返戻金']/10000:,.0f}万円",
-    "死亡保険金": f"{p['死亡保険金']/10000:,.0f}万円",
-    "出口戦略": p["出口戦略"],
-} for p in policies])
-
-def color_exit(val):
-    if "①" in val: return "background-color: #dbeafe"
-    if "②" in val: return "background-color: #dcfce7"
-    if "③" in val: return "background-color: #fef9c3"
-    return ""
-
-st.dataframe(ins_df.style.applymap(color_exit, subset=["出口戦略"]),
-             use_container_width=True, hide_index=True)
-
-# 出口戦略別の集計
-st.markdown("**出口戦略別 集計**")
-exit_summary = {}
-for p in policies:
-    e = p["出口戦略"]
-    if e not in exit_summary:
-        exit_summary[e] = {"件数": 0, "解約返戻金合計": 0, "死亡保険金合計": 0}
-    exit_summary[e]["件数"] += 1
-    exit_summary[e]["解約返戻金合計"] += p["解約返戻金"]
-    exit_summary[e]["死亡保険金合計"] += p["死亡保険金"]
-
-exit_df = pd.DataFrame([{
-    "出口戦略": k,
-    "件数": v["件数"],
-    "解約返戻金合計": f"{v['解約返戻金合計']/10000:,.0f}万円",
-    "死亡保険金合計": f"{v['死亡保険金合計']/10000:,.0f}万円",
-    "退職金への算入": "✅ あり" if "①" in k else "─",
-} for k, v in exit_summary.items()])
-st.dataframe(exit_df, use_container_width=True, hide_index=True)
-
-st.divider()
-
-# ─────────────────────────────────────────
-# 預貯金・個人保険サマリー
-# ─────────────────────────────────────────
-st.markdown("## 🏧 預貯金・個人保険")
-
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("預貯金（現在残高）", f"{savings_current/10000:,.0f}万円")
-c2.metric(f"積立予定（{savings_years}年間）", f"{savings_annual/10000*savings_years:,.0f}万円")
-c3.metric("引退時の預貯金合計", f"{total_savings/10000:,.0f}万円")
-c4.metric("個人保険 受取見込合計", f"{total_personal_ins/10000:,.0f}万円")
-
-if personal_policies:
-    pins_df = pd.DataFrame([{
-        "保険名": p["名称"],
-        "種類": p["種類"],
-        "受取見込額": f"{p['受取見込額']/10000:,.0f}万円",
-        "年金月額": f"{p['年金月額']:,}円" if p["年金月額"] > 0 else "一時金のみ",
-    } for p in personal_policies])
-    st.dataframe(pins_df, use_container_width=True, hide_index=True)
+# ── 相続対策 ──
+st.markdown("## 🛡️ 万が一の場合・相続対策")
+c1, c2, c3 = st.columns(3)
+c1.metric("死亡保険金合計（法人保険）", f"{total_death/10000:,.0f}万円")
+c2.metric("相続税非課税枠", f"{inheritance_exemption/10000:,.0f}万円",
+          help=f"500万円 × {num_heirs}人")
+c3.metric("非課税対象額", f"{min(total_death, inheritance_exemption)/10000:,.0f}万円")
 
 if total_personal_annuity > 0:
-    st.info(f"💡 個人年金の月額合計：{total_personal_annuity:,}円 → 老後の毎月の収入に加算されます。")
+    st.info(f"💡 個人年金の月額合計：{total_personal_annuity:,}円 → 老後の毎月の収入に加算されています。")
 
 st.divider()
 

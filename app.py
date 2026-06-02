@@ -227,29 +227,42 @@ def apply_load_data(data: dict):
     for k, v in data.items():
         st.session_state[k] = v
 
-# ── 保存・読み込みUI（フォームの上に常時表示）──
-with st.container():
-    sv_col1, sv_col2, sv_col3 = st.columns([2, 2, 5])
+# ── 保存・読み込みUI ──
+st.markdown("""
+<div style="background:#f0f4ff;border-radius:10px;padding:14px 20px;margin-bottom:12px;">
+<strong>📁 入力内容の保存・呼び出し</strong><br>
+<span style="font-size:0.88rem;color:#555;">
+入力した内容をファイルに保存しておけば、次回また同じ内容を一瞬で呼び出せます。<br>
+顧客ごとにファイルを分けて保存しておくと便利です。
+</span>
+</div>
+""", unsafe_allow_html=True)
 
-    # 保存ボタン
+sv_col1, sv_col2 = st.columns(2)
+
+with sv_col1:
+    st.markdown("**💾 今の入力内容を保存する**")
     if st.session_state.get("simulated"):
         save_data = collect_save_data()
         save_json = json.dumps(save_data, ensure_ascii=False, indent=2)
         filename = f"老後資金設定_{datetime.date.today().strftime('%Y%m%d')}.json"
-        sv_col1.download_button(
-            label="💾 設定を保存",
+        st.download_button(
+            label="⬇️ ファイルに保存する",
             data=save_json,
             file_name=filename,
             mime="application/json",
-            help="現在の入力内容をJSONファイルとして保存します。次回読み込むことで復元できます。",
+            use_container_width=True,
         )
+        st.caption(f"保存ファイル名：{filename}")
+    else:
+        st.info("シミュレーションを実行すると保存できます。")
 
-    # 読み込みボタン
-    uploaded = sv_col2.file_uploader(
-        "📂 設定を読み込む",
+with sv_col2:
+    st.markdown("**📂 以前保存した内容を呼び出す**")
+    uploaded = st.file_uploader(
+        "保存済みファイルを選択してください",
         type=["json"],
-        label_visibility="collapsed",
-        help="以前保存したJSONファイルをアップロードすると入力値が復元されます。",
+        help="「ファイルに保存する」でダウンロードしたファイルを選んでください。",
         key="upload_json",
     )
     if uploaded is not None:
@@ -257,7 +270,7 @@ with st.container():
             loaded = json.load(uploaded)
             apply_load_data(loaded)
             st.session_state["simulated"] = True
-            st.success("✅ 設定を読み込みました！")
+            st.success("✅ 読み込み完了！内容を復元しました。")
             st.rerun()
         except Exception as e:
             st.error(f"読み込みに失敗しました: {e}")

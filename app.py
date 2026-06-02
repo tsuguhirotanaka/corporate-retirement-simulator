@@ -628,21 +628,30 @@ ret_tax = calc_retirement_tax(retirement_total, years_as_director)
 # 相続税非課税枠
 inheritance_exemption = LIFE_INSURANCE_EXEMPTION_PER_HEIR * num_heirs
 
-# 老後キャッシュフロー
+# 老後キャッシュフロー（生活費ベースで計算）
+monthly_income_from_pension = monthly_pension + total_personal_annuity  # 公的年金＋個人年金
 cf_df = calc_cashflow(
     retire_age, life_expectancy,
     ret_tax["実質手取り"],
-    monthly_pension + total_personal_annuity,  # 公的年金＋個人年金
-    monthly_expense
+    monthly_income_from_pension,
+    monthly_expense,  # 実際の生活費で計算
 )
 depleted = cf_df[cf_df["資産残高"] <= 0]["年齢"].tolist()
 depleted_age = depleted[0] if depleted else None
 
-# ギャップ分析
+# ギャップ分析（キャッシュフローと同じ生活費ベースで統一）
 pension_start = max(retire_age, 65)
-pension_total = monthly_pension * 12 * (life_expectancy - pension_start)
-required_total = ideal_monthly * 12 * (life_expectancy - retire_age)
-gap = required_total - pension_total - ret_tax["実質手取り"]
+pension_years = life_expectancy - pension_start
+retire_years  = life_expectancy - retire_age
+pension_total = monthly_income_from_pension * 12 * pension_years
+# 生活費ベースの必要総額
+required_total = monthly_expense * 12 * retire_years
+# 準備できている総額 = 退職金手取り + 年金収入の合計
+prepared_total = ret_tax["実質手取り"] + pension_total
+gap = required_total - prepared_total
+
+# 希望月収との差（理想 vs 年金収入だけでまかなえる額）
+monthly_shortfall = max(0, ideal_monthly - monthly_income_from_pension)
 
 # ─────────────────────────────────────────
 # [1] 総合サマリー
@@ -838,21 +847,47 @@ st.divider()
 # ─────────────────────────────────────────
 st.markdown("## 📊 現状診断・ギャップ分析")
 
-c1, c2, c3 = st.columns(3)
-c1.metric("必要老後資金（総額）", f"{required_total/10000:,.0f}万円")
-c2.metric("準備できている資金", f"{(ret_tax['実質手取り']+pension_total)/10000:,.0f}万円")
-c3.metric("過不足", f"{'▼' if gap>0 else '▲'}{abs(gap)/10000:,.0f}万円",
-          delta_color="inverse" if gap > 0 else "normal")
+st.caption(f"※ 生活費ベース（月{monthly_expense/10000:.0f}万円）で統一して計算しています。")
 
+c1, c2, c3 = st.columns(3)
+c1.metric(
+    "必要な老後資金（総額）",
+    f"{required_total/10000:,.0f}万円",
+    help=f"月々の生活費 {monthly_expense/10000:.0f}万円 × 12ヶ月 × {retire_years}年"
+)
+c2.metric(
+    "準備できている資金",
+    f"{prepared_total/10000:,.0f}万円",
+    help="退職金の手取り + 引退後に受け取る年金の合計"
+)
+c3.metric(
+    "過不足",
+    f"{'▼ 不足 ' if gap>0 else '▲ 余裕 '}{abs(gap)/10000:,.0f}万円",
+    delta_color="inverse" if gap > 0 else "normal"
+)
+
+# キャッシュフローベースの判定（実態に即した結果）
 if depleted_age:
     st.markdown(f"""<div class="gap-box">
-⚠️ <strong>資産が尽きる年齢：{depleted_age}歳</strong>
-想定寿命{life_expectancy}歳まであと<strong>{life_expectancy - depleted_age}年分</strong>の資金が不足しています。
+⚠️ <strong>資産が尽きる年齢：{depleted_age}歳</strong><br>
+生活費（月{monthly_expense/10000:.0f}万円）を続けると、想定寿命{life_expectancy}歳より
+<strong>{life_expectancy - depleted_age}年早く</strong>資産が底をつきます。
 </div>""", unsafe_allow_html=True)
 else:
     st.markdown(f"""<div class="ok-box">
-✅ <strong>想定寿命{life_expectancy}歳まで資産が持続します。</strong>
+✅ <strong>生活費（月{monthly_expense/10000:.0f}万円）であれば、想定寿命{life_expectancy}歳まで資産が持続します。</strong><br>
 {life_expectancy}歳時点の残資産：約{cf_df.iloc[-1]["資産残高"]/10000:,.0f}万円
+</div>""", unsafe_allow_html=True)
+
+# 希望月収との差
+if monthly_shortfall > 0:
+    st.markdown(f"""<div class="warn-box">
+💡 <strong>希望月収（{ideal_monthly/10000:.0f}万円）の達成状況</strong><br>
+年金収入だけでは月<strong>{monthly_income_from_pension/10000:.0f}万円</strong>。
+希望まであと月<strong>{monthly_shortfall/10000:.0f}万円</strong>不足します。
+退職金（手取り{ret_tax["実質手取り"]/10000:,.0f}万円）を毎月<strong>
+{monthly_shortfall/10000:.0f}万円ずつ取り崩す</strong>と
+約<strong>{ret_tax["実質手取り"]/(monthly_shortfall*12):.0f}年間</strong>まかなえます。
 </div>""", unsafe_allow_html=True)
 
 st.divider()

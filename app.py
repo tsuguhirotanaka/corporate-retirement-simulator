@@ -340,6 +340,67 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
 
     st.divider()
 
+    # ── 預貯金 ──
+    st.markdown("#### 🏧 預貯金・現金資産")
+    st.caption("現在の預貯金残高と、引退までの年間積立額を入力してください。")
+    c1, c2, c3 = st.columns(3)
+    savings_current = c1.number_input(
+        "現在の預貯金残高（万円）", 0, 100_000, 1_000, 100, format="%d",
+        help="個人・法人問わず、老後に使える預貯金の合計。"
+    ) * 10_000
+    savings_annual  = c2.number_input(
+        "引退まで毎年の積立額（万円）", 0, 10_000, 100, 50, format="%d",
+        help="給与や役員報酬から毎年貯蓄できる金額の目安。"
+    ) * 10_000
+    savings_years   = c3.number_input(
+        "積立年数", 0, 40, int(retire_age - current_age), 1, key="sav_y"
+    )
+
+    st.divider()
+
+    # ── 個人保険 ──
+    st.markdown("#### 🧑 個人で契約している保険")
+    st.caption("個人名義の生命保険・個人年金保険などの解約返戻金・満期金を入力してください。")
+
+    if "num_personal_ins" not in st.session_state:
+        st.session_state["num_personal_ins"] = 1
+
+    pc1, pc2, _ = st.columns([1, 1, 5])
+    if pc1.button("➕ 追加", key="add_pins", disabled=st.session_state["num_personal_ins"] >= 5):
+        st.session_state["num_personal_ins"] += 1
+        st.rerun()
+    if pc2.button("➖ 削除", key="del_pins", disabled=st.session_state["num_personal_ins"] <= 1):
+        st.session_state["num_personal_ins"] -= 1
+        st.rerun()
+
+    personal_policies = []
+    personal_ins_types = ["終身保険（個人）", "個人年金保険", "養老保険", "学資保険", "その他"]
+    for i in range(st.session_state["num_personal_ins"]):
+        st.markdown(f'<div class="ins-header">個人保険 {i+1}</div>', unsafe_allow_html=True)
+        c1, c2, c3, c4 = st.columns(4)
+        pins_name    = c1.text_input("保険名", value=f"個人保険{i+1}", key=f"pins_name_{i}")
+        pins_type    = c2.selectbox("種類", personal_ins_types, key=f"pins_type_{i}")
+        pins_receive = c3.number_input(
+            "引退時の受取見込額（万円）", 0, 100_000, 500, 100,
+            format="%d", key=f"pins_recv_{i}",
+            help="解約返戻金・満期金・個人年金の一時金受取額の見込み。"
+        ) * 10_000
+        pins_monthly_annuity = c4.number_input(
+            "年金月額（円）※年金型の場合", 0, 500_000, 0, 10_000,
+            format="%d", key=f"pins_ann_{i}",
+            help="個人年金保険など月々受け取る場合の月額。一時金の場合は0。"
+        )
+        personal_policies.append({
+            "名称": pins_name,
+            "種類": pins_type,
+            "受取見込額": pins_receive,
+            "年金月額": pins_monthly_annuity,
+        })
+        if i < st.session_state["num_personal_ins"] - 1:
+            st.markdown("<hr style='border:1px dashed #c5d8f5; margin:8px 0;'>", unsafe_allow_html=True)
+
+    st.divider()
+
     # ── 理想設定 ──
     st.markdown("#### 🎯 理想の老後設定")
     c1, c2 = st.columns(2)
@@ -373,14 +434,23 @@ kyosai = calc_kyosai(kyosai_monthly, kyosai_years)
 ideco  = calc_ideco(ideco_monthly, ideco_years, ideco_return)
 nisa   = calc_nisa(nisa_monthly, nisa_years, nisa_return)
 
+# 預貯金：現在残高＋積立
+total_savings = int(savings_current + savings_annual * savings_years)
+
+# 個人保険：一時金の合計
+total_personal_ins = sum(p["受取見込額"] for p in personal_policies)
+# 個人保険：年金月額の合計
+total_personal_annuity = sum(p["年金月額"] for p in personal_policies)
+
 # 保険の集計
 total_surrender   = sum(p["解約返戻金"] for p in policies if p["出口戦略"] == EXIT_OPTIONS[0])
 total_death       = sum(p["死亡保険金"] for p in policies)
 total_ins_premium = sum(p["保険料総額"] for p in policies)
 total_ins_tax     = sum(p["節税総額"] for p in policies)
 
-# 退職金総額（解約のみ）＋NISA資産（非課税で引退時に売却想定）
-retirement_total = total_surrender + kyosai["受取概算額"] + ideco["積立総額（運用込）"] + nisa["積立総額（運用込・非課税）"]
+# 退職金総額（法人保険解約＋共済＋iDeCo＋NISA＋預貯金＋個人保険）
+retirement_total = (total_surrender + kyosai["受取概算額"] + ideco["積立総額（運用込）"]
+                    + nisa["積立総額（運用込・非課税）"] + total_savings + total_personal_ins)
 
 # 退職所得控除・税金
 ret_tax = calc_retirement_tax(retirement_total, years_as_director)
@@ -391,7 +461,9 @@ inheritance_exemption = LIFE_INSURANCE_EXEMPTION_PER_HEIR * num_heirs
 # 老後キャッシュフロー
 cf_df = calc_cashflow(
     retire_age, life_expectancy,
-    ret_tax["実質手取り"], monthly_pension, monthly_expense
+    ret_tax["実質手取り"],
+    monthly_pension + total_personal_annuity,  # 公的年金＋個人年金
+    monthly_expense
 )
 depleted = cf_df[cf_df["資産残高"] <= 0]["年齢"].tolist()
 depleted_age = depleted[0] if depleted else None
@@ -417,8 +489,9 @@ with c1:
   </div>
   <div style="font-size:0.95rem; line-height:2.0; margin-top:8px;">
     退職金総額：{retirement_total/10000:,.0f}万円<br>
-    　└ 保険解約：{total_surrender/10000:,.0f}万円　共済：{kyosai["受取概算額"]/10000:,.0f}万円<br>
+    　└ 法人保険：{total_surrender/10000:,.0f}万円　共済：{kyosai["受取概算額"]/10000:,.0f}万円<br>
     　└ iDeCo：{ideco["積立総額（運用込）"]/10000:,.0f}万円　NISA：{nisa["積立総額（運用込・非課税）"]/10000:,.0f}万円<br>
+    　└ 預貯金：{total_savings/10000:,.0f}万円　個人保険：{total_personal_ins/10000:,.0f}万円<br>
     退職所得控除：▼{ret_tax["退職所得控除額"]/10000:,.0f}万円<br>
     税金合計：▼{ret_tax["税金合計"]/10000:,.0f}万円（実効税率 {ret_tax["実効税率"]:.1f}%）
   </div>
@@ -486,6 +559,31 @@ exit_df = pd.DataFrame([{
     "退職金への算入": "✅ あり" if "①" in k else "─",
 } for k, v in exit_summary.items()])
 st.dataframe(exit_df, use_container_width=True, hide_index=True)
+
+st.divider()
+
+# ─────────────────────────────────────────
+# 預貯金・個人保険サマリー
+# ─────────────────────────────────────────
+st.markdown("## 🏧 預貯金・個人保険")
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("預貯金（現在残高）", f"{savings_current/10000:,.0f}万円")
+c2.metric(f"積立予定（{savings_years}年間）", f"{savings_annual/10000*savings_years:,.0f}万円")
+c3.metric("引退時の預貯金合計", f"{total_savings/10000:,.0f}万円")
+c4.metric("個人保険 受取見込合計", f"{total_personal_ins/10000:,.0f}万円")
+
+if personal_policies:
+    pins_df = pd.DataFrame([{
+        "保険名": p["名称"],
+        "種類": p["種類"],
+        "受取見込額": f"{p['受取見込額']/10000:,.0f}万円",
+        "年金月額": f"{p['年金月額']:,}円" if p["年金月額"] > 0 else "一時金のみ",
+    } for p in personal_policies])
+    st.dataframe(pins_df, use_container_width=True, hide_index=True)
+
+if total_personal_annuity > 0:
+    st.info(f"💡 個人年金の月額合計：{total_personal_annuity:,}円 → 老後の毎月の収入に加算されます。")
 
 st.divider()
 

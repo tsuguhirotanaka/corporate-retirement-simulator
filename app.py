@@ -75,6 +75,24 @@ def calc_retirement_tax(retirement_income: int, years: int) -> dict:
         "実効税率": total_tax / retirement_income * 100 if retirement_income > 0 else 0,
     }
 
+def calc_nisa(monthly: int, years: int, annual_return: float) -> dict:
+    """NISA（新NISA）の積立試算。運用益は非課税。"""
+    total_paid = monthly * 12 * years
+    mr = annual_return / 12 / 100
+    if mr > 0:
+        total_asset = int(monthly * ((1 + mr) ** (years * 12) - 1) / mr)
+    else:
+        total_asset = total_paid
+    profit = total_asset - total_paid
+    # 通常課税（20.315%）との比較で節税効果を算出
+    tax_saving = int(profit * 0.20315)
+    return {
+        "掛金総額": total_paid,
+        "積立総額（運用込・非課税）": total_asset,
+        "運用益（非課税）": profit,
+        "節税効果（通常課税比）": tax_saving,
+    }
+
 def calc_kyosai(monthly: int, years: int) -> dict:
     total_paid = monthly * 12 * years
     rate = 1.20 if years >= 20 else 1.15 if years >= 15 else 1.10 if years >= 10 else 1.05
@@ -283,6 +301,29 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
 
     st.divider()
 
+    # ── NISA ──
+    st.markdown("#### 📊 NISA（新NISA）")
+    st.caption("新NISAは年間360万円（つみたて投資枠120万円＋成長投資枠240万円）まで非課税で投資可能。運用益・売却益が永久非課税。")
+    c1, c2, c3, c4 = st.columns(4)
+    nisa_monthly = c1.number_input(
+        "月額積立（円）", 0, 300_000, 100_000, 10_000, format="%d",
+        help="新NISAの月額積立額。年間上限：つみたて枠10万円＋成長投資枠20万円＝最大30万円/月"
+    )
+    nisa_years = c2.number_input(
+        "積立年数", 0, 40, int(retire_age - current_age), 1, key="nisa_y"
+    )
+    nisa_return = c3.number_input(
+        "想定運用利率（%）", 0.0, 15.0, 5.0, 0.5,
+        help="長期の株式インデックス投資の平均リターンは年3〜7%程度が目安です。"
+    )
+    nisa_type = c4.selectbox(
+        "主な投資枠",
+        ["つみたて投資枠", "成長投資枠", "両方（併用）"],
+        help="つみたて投資枠：年120万円上限・長期分散向け投信のみ。成長投資枠：年240万円上限・株式・投信等幅広く対応。"
+    )
+
+    st.divider()
+
     # ── 役員退職金 ──
     st.markdown("#### 🏆 役員退職金の設計（功績倍率方式）")
     c1, c2 = st.columns(2)
@@ -330,6 +371,7 @@ if not st.session_state.get("simulated"):
 # ─────────────────────────────────────────
 kyosai = calc_kyosai(kyosai_monthly, kyosai_years)
 ideco  = calc_ideco(ideco_monthly, ideco_years, ideco_return)
+nisa   = calc_nisa(nisa_monthly, nisa_years, nisa_return)
 
 # 保険の集計
 total_surrender   = sum(p["解約返戻金"] for p in policies if p["出口戦略"] == EXIT_OPTIONS[0])
@@ -337,8 +379,8 @@ total_death       = sum(p["死亡保険金"] for p in policies)
 total_ins_premium = sum(p["保険料総額"] for p in policies)
 total_ins_tax     = sum(p["節税総額"] for p in policies)
 
-# 退職金総額（解約のみ）
-retirement_total = total_surrender + kyosai["受取概算額"] + ideco["積立総額（運用込）"]
+# 退職金総額（解約のみ）＋NISA資産（非課税で引退時に売却想定）
+retirement_total = total_surrender + kyosai["受取概算額"] + ideco["積立総額（運用込）"] + nisa["積立総額（運用込・非課税）"]
 
 # 退職所得控除・税金
 ret_tax = calc_retirement_tax(retirement_total, years_as_director)
@@ -375,6 +417,8 @@ with c1:
   </div>
   <div style="font-size:0.95rem; line-height:2.0; margin-top:8px;">
     退職金総額：{retirement_total/10000:,.0f}万円<br>
+    　└ 保険解約：{total_surrender/10000:,.0f}万円　共済：{kyosai["受取概算額"]/10000:,.0f}万円<br>
+    　└ iDeCo：{ideco["積立総額（運用込）"]/10000:,.0f}万円　NISA：{nisa["積立総額（運用込・非課税）"]/10000:,.0f}万円<br>
     退職所得控除：▼{ret_tax["退職所得控除額"]/10000:,.0f}万円<br>
     税金合計：▼{ret_tax["税金合計"]/10000:,.0f}万円（実効税率 {ret_tax["実効税率"]:.1f}%）
   </div>
@@ -512,6 +556,38 @@ st.divider()
 # ─────────────────────────────────────────
 # [5] 退職所得控除・税金明細
 # ─────────────────────────────────────────
+st.divider()
+
+# ─────────────────────────────────────────
+# NISA詳細
+# ─────────────────────────────────────────
+st.markdown("## 📊 NISA（新NISA）詳細")
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("月額積立", f"{nisa_monthly/10000:.1f}万円")
+c2.metric("積立総額（元本）", f"{nisa['掛金総額']/10000:,.0f}万円")
+c3.metric("積立総額（運用込・非課税）", f"{nisa['積立総額（運用込・非課税）']/10000:,.0f}万円")
+c4.metric("運用益（非課税）", f"{nisa['運用益（非課税）']/10000:,.0f}万円")
+
+st.markdown(f"""
+<div class="ok-box">
+💡 <strong>NISAの非課税メリット</strong><br>
+通常の課税口座で同額を運用した場合、運用益{nisa['運用益（非課税）']/10000:,.0f}万円に対して
+約<strong>{nisa['節税効果（通常課税比）']/10000:,.0f}万円</strong>の税金（20.315%）がかかります。
+NISAではこれが<strong>永久非課税</strong>となります。<br>
+投資枠：{nisa_type}　／　想定利率：{nisa_return}%　／　積立年数：{nisa_years}年
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="warn-box">
+⚠️ <strong>注意</strong>：NISAは元本保証ではありません。投資リスクを十分ご理解の上、ご活用ください。
+新NISAの年間投資上限は1,800万円（生涯非課税枠）です。
+</div>
+""", unsafe_allow_html=True)
+
+st.divider()
+
 st.markdown("## 🏆 役員退職金・退職所得控除の明細")
 
 c1, c2 = st.columns(2)

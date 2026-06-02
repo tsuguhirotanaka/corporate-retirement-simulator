@@ -7,6 +7,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import json
+import datetime
 
 # ─────────────────────────────────────────
 # 定数
@@ -188,6 +190,77 @@ st.caption("複数の法人保険（最大10件）＋退職金・相続・老後
 # ─────────────────────────────────────────
 if "num_policies" not in st.session_state:
     st.session_state["num_policies"] = 1
+if "num_personal_ins" not in st.session_state:
+    st.session_state["num_personal_ins"] = 1
+
+# ─────────────────────────────────────────
+# 保存・読み込み機能
+# ─────────────────────────────────────────
+def collect_save_data() -> dict:
+    """現在のsession_stateから保存対象のキーを収集してdictで返す"""
+    keys = [
+        "current_age", "retire_age", "life_expectancy", "num_heirs",
+        "last_salary", "years_as_director", "multiplier",
+        "monthly_pension", "monthly_expense",
+        "kyosai_monthly", "kyosai_y",
+        "ideco_monthly", "ideco_y", "ideco_return",
+        "nisa_monthly", "nisa_y", "nisa_return", "nisa_type",
+        "savings_current", "savings_annual", "sav_y",
+        "ideal_monthly", "ideal_asset",
+        "num_policies", "num_personal_ins",
+    ]
+    # 法人保険（動的キー）
+    n_pol = st.session_state.get("num_policies", 1)
+    for i in range(n_pol):
+        for suffix in ["ins_name", "ins_type", "ins_m", "ins_y", "ins_r", "ins_d", "ins_exit"]:
+            keys.append(f"{suffix}_{i}")
+    # 個人保険（動的キー）
+    n_pins = st.session_state.get("num_personal_ins", 1)
+    for i in range(n_pins):
+        for suffix in ["pins_name", "pins_type", "pins_recv", "pins_ann"]:
+            keys.append(f"{suffix}_{i}")
+
+    return {k: st.session_state[k] for k in keys if k in st.session_state}
+
+def apply_load_data(data: dict):
+    """読み込んだdictをsession_stateに反映する"""
+    for k, v in data.items():
+        st.session_state[k] = v
+
+# ── 保存・読み込みUI（フォームの上に常時表示）──
+with st.container():
+    sv_col1, sv_col2, sv_col3 = st.columns([2, 2, 5])
+
+    # 保存ボタン
+    if st.session_state.get("simulated"):
+        save_data = collect_save_data()
+        save_json = json.dumps(save_data, ensure_ascii=False, indent=2)
+        filename = f"老後資金設定_{datetime.date.today().strftime('%Y%m%d')}.json"
+        sv_col1.download_button(
+            label="💾 設定を保存",
+            data=save_json,
+            file_name=filename,
+            mime="application/json",
+            help="現在の入力内容をJSONファイルとして保存します。次回読み込むことで復元できます。",
+        )
+
+    # 読み込みボタン
+    uploaded = sv_col2.file_uploader(
+        "📂 設定を読み込む",
+        type=["json"],
+        label_visibility="collapsed",
+        help="以前保存したJSONファイルをアップロードすると入力値が復元されます。",
+        key="upload_json",
+    )
+    if uploaded is not None:
+        try:
+            loaded = json.load(uploaded)
+            apply_load_data(loaded)
+            st.session_state["simulated"] = True
+            st.success("✅ 設定を読み込みました！")
+            st.rerun()
+        except Exception as e:
+            st.error(f"読み込みに失敗しました: {e}")
 
 # ─────────────────────────────────────────
 # 入力フォーム
@@ -197,10 +270,10 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
     # ── 共通：基本情報 ──
     st.markdown("#### 👤 基本情報")
     c1, c2, c3, c4 = st.columns(4)
-    current_age     = c1.number_input("現在の年齢", 30, 75, 50, 1)
-    retire_age      = c2.number_input("引退予定年齢", int(current_age)+1, 80, 65, 1)
-    life_expectancy = c3.number_input("想定寿命", 65, 100, 85, 1)
-    num_heirs       = c4.number_input("法定相続人の数", 1, 10, 2, 1,
+    current_age     = c1.number_input("現在の年齢", 30, 75, 50, 1, key="current_age")
+    retire_age      = c2.number_input("引退予定年齢", int(current_age)+1, 80, 65, 1, key="retire_age")
+    life_expectancy = c3.number_input("想定寿命", 65, 100, 85, 1, key="life_expectancy")
+    num_heirs       = c4.number_input("法定相続人の数", 1, 10, 2, 1, key="num_heirs",
                                       help="相続税非課税枠（500万円×人数）の計算に使います。")
 
     st.divider()
@@ -215,9 +288,11 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
         st.markdown("#### 💼 役員報酬・在任年数")
         c1, c2 = st.columns(2)
         last_salary       = c1.number_input("最終報酬月額（円）", 0, 5_000_000, 1_000_000, 50_000,
-                                             format="%d", help="功績倍率方式の役員退職金計算に使います。")
+                                             format="%d", key="last_salary",
+                                             help="功績倍率方式の役員退職金計算に使います。")
         years_as_director = c2.number_input("役員在任年数（引退時点）", 1, 50,
-                                             int(retire_age - current_age + 10), 1)
+                                             int(retire_age - current_age + 10), 1,
+                                             key="years_as_director")
 
         st.divider()
 
@@ -279,7 +354,8 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
         # 小規模企業共済
         st.markdown("#### 🏛️ 小規模企業共済")
         c1, c2 = st.columns(2)
-        kyosai_monthly = c1.number_input("掛金月額（円）※最大70,000円", 0, 70_000, 70_000, 1_000, format="%d")
+        kyosai_monthly = c1.number_input("掛金月額（円）※最大70,000円", 0, 70_000, 70_000, 1_000,
+                                          format="%d", key="kyosai_monthly")
         kyosai_years   = c2.number_input("加入年数（引退時点）", 0, 45, int(retire_age - current_age), 1,
                                           key="kyosai_y")
 
@@ -288,7 +364,7 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
         # 役員退職金
         st.markdown("#### 🏆 役員退職金の設計（功績倍率方式）")
         c1, c2 = st.columns(2)
-        multiplier    = c1.number_input("功績倍率", 0.5, 3.0, 2.0, 0.1,
+        multiplier    = c1.number_input("功績倍率", 0.5, 3.0, 2.0, 0.1, key="multiplier",
                                          help="代表取締役：2.0〜3.0倍、取締役：1.5〜2.0倍が目安")
         yakuin_amount = calc_yakuin(last_salary, years_as_director, multiplier)
         c2.markdown(f"""
@@ -307,18 +383,21 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
         # 公的年金・生活費
         st.markdown("#### 💴 公的年金・生活費")
         c1, c2 = st.columns(2)
-        monthly_pension = c1.number_input("公的年金 月額（円）", 0, 500_000, 150_000, 5_000, format="%d")
-        monthly_expense = c2.number_input("引退後の月々の生活費（円）", 0, 2_000_000, 300_000, 10_000, format="%d")
+        monthly_pension = c1.number_input("公的年金 月額（円）", 0, 500_000, 150_000, 5_000,
+                                           format="%d", key="monthly_pension")
+        monthly_expense = c2.number_input("引退後の月々の生活費（円）", 0, 2_000_000, 300_000, 10_000,
+                                           format="%d", key="monthly_expense")
 
         st.divider()
 
         # iDeCo
         st.markdown("#### 📈 iDeCo（個人型確定拠出年金）")
         c1, c2, c3 = st.columns(3)
-        ideco_monthly = c1.number_input("掛金月額（円）※経営者最大23,000円", 0, 23_000, 23_000, 1_000, format="%d")
+        ideco_monthly = c1.number_input("掛金月額（円）※経営者最大23,000円", 0, 23_000, 23_000, 1_000,
+                                         format="%d", key="ideco_monthly")
         ideco_years   = c2.number_input("加入年数（引退時点）", 0, 40, int(retire_age - current_age), 1,
                                          key="ideco_y")
-        ideco_return  = c3.number_input("想定運用利率（%）", 0.0, 10.0, 3.0, 0.5)
+        ideco_return  = c3.number_input("想定運用利率（%）", 0.0, 10.0, 3.0, 0.5, key="ideco_return")
 
         st.divider()
 
@@ -327,12 +406,12 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
         st.caption("年間360万円まで非課税で投資可能。運用益・売却益が永久非課税。")
         c1, c2, c3, c4 = st.columns(4)
         nisa_monthly = c1.number_input("月額積立（円）", 0, 300_000, 100_000, 10_000, format="%d",
-                                        help="最大30万円/月（年360万円）")
+                                        key="nisa_monthly", help="最大30万円/月（年360万円）")
         nisa_years   = c2.number_input("積立年数", 0, 40, int(retire_age - current_age), 1, key="nisa_y")
-        nisa_return  = c3.number_input("想定運用利率（%）", 0.0, 15.0, 5.0, 0.5,
+        nisa_return  = c3.number_input("想定運用利率（%）", 0.0, 15.0, 5.0, 0.5, key="nisa_return",
                                         help="長期インデックス投資の目安：年3〜7%")
-        nisa_type    = c4.selectbox("主な投資枠",
-                                     ["つみたて投資枠", "成長投資枠", "両方（併用）"])
+        nisa_type    = c4.selectbox("主な投資枠", ["つみたて投資枠", "成長投資枠", "両方（併用）"],
+                                     key="nisa_type")
 
         st.divider()
 
@@ -398,8 +477,10 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
     st.divider()
     st.markdown("#### 🎯 理想の老後設定")
     c1, c2 = st.columns(2)
-    ideal_monthly = c1.number_input("引退後に欲しい月収（円）", 0, 2_000_000, 500_000, 10_000, format="%d")
-    ideal_asset   = c2.number_input("死亡時に残したい資産（万円）", 0, 100_000, 3_000, 500, format="%d") * 10_000
+    ideal_monthly = c1.number_input("引退後に欲しい月収（円）", 0, 2_000_000, 500_000, 10_000,
+                                     format="%d", key="ideal_monthly")
+    ideal_asset   = c2.number_input("死亡時に残したい資産（万円）", 0, 100_000, 3_000, 500,
+                                     format="%d", key="ideal_asset") * 10_000
 
     st.divider()
     run_btn = st.button("🔍 シミュレーション実行", type="primary", use_container_width=True)

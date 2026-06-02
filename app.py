@@ -447,7 +447,7 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
 
         # 個人保険
         st.markdown("#### 🧑 個人で契約している保険")
-        st.caption("個人名義の生命保険・個人年金保険などの解約返戻金・満期金を入力してください。")
+        st.caption("個人名義の生命保険・個人年金保険など。引退時の使い方を保険ごとに設定できます。")
 
         if "num_personal_ins" not in st.session_state:
             st.session_state["num_personal_ins"] = 1
@@ -460,27 +460,87 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
             st.session_state["num_personal_ins"] -= 1
             st.rerun()
 
+        PERSONAL_EXIT_OPTIONS = [
+            "💴 解約して生活費・老後資金に使う",
+            "🛡️ 死亡保険金として遺族・相続に残す",
+            "📅 個人年金として毎月受け取る",
+        ]
+        PERSONAL_EXIT_NOTES = {
+            "💴 解約して生活費・老後資金に使う":
+                "引退時に解約し、解約返戻金を老後の生活費や退職金の補填として活用します。",
+            "🛡️ 死亡保険金として遺族・相続に残す":
+                "解約せずに継続保持。万が一の際の死亡保険金を遺族への資産として残します。相続税の非課税枠（500万円×法定相続人数）も活用できます。",
+            "📅 個人年金として毎月受け取る":
+                "個人年金保険として毎月一定額を受け取ります。老後の月々の収入として計算に加算されます。",
+        }
+
         personal_policies = []
         personal_ins_types = ["終身保険（個人）", "個人年金保険", "養老保険", "学資保険", "その他"]
         for i in range(st.session_state["num_personal_ins"]):
             st.markdown(f'<div class="ins-header">個人保険 {i+1}</div>', unsafe_allow_html=True)
-            c1, c2, c3, c4 = st.columns(4)
-            pins_name    = c1.text_input("保険名", value=f"個人保険{i+1}", key=f"pins_name_{i}")
-            pins_type    = c2.selectbox("種類", personal_ins_types, key=f"pins_type_{i}")
-            pins_receive = c3.number_input(
-                "引退時の受取見込額（万円）", 0, 100_000, 500, 100,
-                format="%d", key=f"pins_recv_{i}",
-                help="解約返戻金・満期金・個人年金の一時金受取額の見込み。"
-            ) * 10_000
-            pins_monthly_annuity = c4.number_input(
-                "年金月額（円）※年金型の場合", 0, 500_000, 0, 10_000,
-                format="%d", key=f"pins_ann_{i}",
-                help="個人年金保険など月々受け取る場合の月額。一時金の場合は0。"
+
+            c1, c2 = st.columns(2)
+            pins_name = c1.text_input("保険名", value=f"個人保険{i+1}", key=f"pins_name_{i}")
+            pins_type = c2.selectbox("種類", personal_ins_types, key=f"pins_type_{i}")
+
+            # 使い方の選択
+            pins_exit = st.radio(
+                "引退時の使い方",
+                PERSONAL_EXIT_OPTIONS,
+                key=f"pins_exit_{i}",
+                horizontal=True,
             )
+            st.caption(f"💡 {PERSONAL_EXIT_NOTES[pins_exit]}")
+
+            # 使い方に応じて入力項目を切り替え
+            if pins_exit == "💴 解約して生活費・老後資金に使う":
+                c1, c2 = st.columns(2)
+                pins_receive = c1.number_input(
+                    "解約返戻金の見込額（万円）", 0, 100_000, 500, 100,
+                    format="%d", key=f"pins_recv_{i}",
+                    help="引退時点での解約返戻金の見込み額。保険証券や設計書で確認してください。"
+                ) * 10_000
+                pins_death = 0
+                pins_monthly_annuity = 0
+                c2.markdown(f"""
+<div style="background:#f0fdf4;border-radius:8px;padding:10px 14px;margin-top:8px;">
+老後資金に加算：<strong>{pins_receive/10000:,.0f}万円</strong>
+</div>""", unsafe_allow_html=True)
+
+            elif pins_exit == "🛡️ 死亡保険金として遺族・相続に残す":
+                c1, c2 = st.columns(2)
+                pins_death = c1.number_input(
+                    "死亡保険金額（万円）", 0, 100_000, 1_000, 100,
+                    format="%d", key=f"pins_recv_{i}",
+                    help="万が一の際に受け取れる死亡保険金額。"
+                ) * 10_000
+                pins_receive = 0
+                pins_monthly_annuity = 0
+                c2.markdown(f"""
+<div style="background:#fff0f0;border-radius:8px;padding:10px 14px;margin-top:8px;">
+相続・遺族への資産：<strong>{pins_death/10000:,.0f}万円</strong>
+</div>""", unsafe_allow_html=True)
+
+            else:  # 個人年金として毎月受け取る
+                c1, c2 = st.columns(2)
+                pins_monthly_annuity = c1.number_input(
+                    "毎月の受取額（円）", 0, 500_000, 50_000, 5_000,
+                    format="%d", key=f"pins_recv_{i}",
+                    help="個人年金として毎月受け取る金額。老後の月収に加算されます。"
+                )
+                pins_receive = 0
+                pins_death = 0
+                c2.markdown(f"""
+<div style="background:#f0f4ff;border-radius:8px;padding:10px 14px;margin-top:8px;">
+月々の収入に加算：<strong>{pins_monthly_annuity:,}円／月</strong>
+</div>""", unsafe_allow_html=True)
+
             personal_policies.append({
                 "名称": pins_name,
                 "種類": pins_type,
-                "受取見込額": pins_receive,
+                "使い方": pins_exit,
+                "受取見込額（老後資金）": pins_receive,
+                "死亡保険金": pins_death,
                 "年金月額": pins_monthly_annuity,
             })
             if i < st.session_state["num_personal_ins"] - 1:
@@ -525,10 +585,10 @@ nisa   = calc_nisa(nisa_monthly, nisa_years, nisa_return)
 # 預貯金：現在残高＋積立
 total_savings = int(savings_current + savings_annual * savings_years)
 
-# 個人保険：一時金の合計
-total_personal_ins = sum(p["受取見込額"] for p in personal_policies)
-# 個人保険：年金月額の合計
-total_personal_annuity = sum(p["年金月額"] for p in personal_policies)
+# 個人保険：用途別に集計
+total_personal_ins     = sum(p["受取見込額（老後資金）"] for p in personal_policies)  # 解約→老後資金
+total_personal_death   = sum(p["死亡保険金"] for p in personal_policies)               # 死亡保険金
+total_personal_annuity = sum(p["年金月額"] for p in personal_policies)                 # 個人年金月額
 
 # 保険の集計
 total_surrender   = sum(p["解約返戻金"] for p in policies if p["出口戦略"] == EXIT_OPTIONS[0])
@@ -702,15 +762,28 @@ padding:10px 18px;font-size:1.1rem;font-weight:bold;margin-bottom:16px;">
     st.markdown("**🧑 個人保険**")
     if personal_policies:
         for p in personal_policies:
+            if "解約" in p["使い方"]:
+                color, badge = "#f0fdf4", f"老後資金：{p['受取見込額（老後資金）']/10000:,.0f}万円"
+            elif "死亡" in p["使い方"]:
+                color, badge = "#fff0f0", f"死亡保険金：{p['死亡保険金']/10000:,.0f}万円"
+            else:
+                color, badge = "#f0f4ff", f"年金月額：{p['年金月額']:,}円／月"
             st.markdown(f"""
-<div style="background:#fffbeb;border-radius:8px;padding:10px 14px;margin:6px 0;">
+<div style="background:{color};border-radius:8px;padding:10px 14px;margin:6px 0;">
   <strong>{p['名称']}</strong>（{p['種類']}）<br>
-  受取見込：<strong>{p['受取見込額']/10000:,.0f}万円</strong>
-  {"　年金月額：" + f"{p['年金月額']:,}円" if p['年金月額'] > 0 else ""}
+  {p['使い方']}<br>
+  → <strong>{badge}</strong>
 </div>
 """, unsafe_allow_html=True)
     else:
         st.caption("なし")
+
+    if total_personal_death > 0:
+        st.markdown(f"""
+<div style="background:#fff0f0;border-radius:8px;padding:8px 14px;margin:6px 0;font-size:0.9rem;">
+  🛡️ 個人保険の死亡保険金合計：<strong>{total_personal_death/10000:,.0f}万円</strong>
+</div>
+""", unsafe_allow_html=True)
 
     st.markdown("&nbsp;")
     personal_total = ideco["積立総額（運用込）"] + nisa["積立総額（運用込・非課税）"] + total_savings + total_personal_ins

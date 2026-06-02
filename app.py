@@ -194,143 +194,104 @@ if "num_policies" not in st.session_state:
 # ─────────────────────────────────────────
 with st.expander("📝 情報を入力する", expanded=not st.session_state.get("simulated")):
 
-    # ── 基本情報 ──
+    # ── 共通：基本情報 ──
     st.markdown("#### 👤 基本情報")
     c1, c2, c3, c4 = st.columns(4)
-    current_age    = c1.number_input("現在の年齢", 30, 75, 50, 1)
-    retire_age     = c2.number_input("引退予定年齢", int(current_age)+1, 80, 65, 1)
-    life_expectancy= c3.number_input("想定寿命", 65, 100, 85, 1)
-    num_heirs      = c4.number_input("法定相続人の数", 1, 10, 2, 1,
-                                     help="相続税非課税枠（500万円×人数）の計算に使います。")
-    c1, c2 = st.columns(2)
-    years_as_director = c1.number_input("役員在任年数（引退時点）", 1, 50,
-                                         int(retire_age - current_age + 10), 1)
-    last_salary    = c2.number_input("最終報酬月額（円）", 0, 5_000_000, 1_000_000, 50_000,
-                                     format="%d", help="功績倍率方式の役員退職金計算に使います。")
+    current_age     = c1.number_input("現在の年齢", 30, 75, 50, 1)
+    retire_age      = c2.number_input("引退予定年齢", int(current_age)+1, 80, 65, 1)
+    life_expectancy = c3.number_input("想定寿命", 65, 100, 85, 1)
+    num_heirs       = c4.number_input("法定相続人の数", 1, 10, 2, 1,
+                                      help="相続税非課税枠（500万円×人数）の計算に使います。")
 
     st.divider()
 
-    # ── 年金・生活費 ──
-    st.markdown("#### 💴 公的年金・生活費")
-    c1, c2 = st.columns(2)
-    monthly_pension  = c1.number_input("公的年金 月額（円）", 0, 500_000, 150_000, 5_000, format="%d")
-    monthly_expense  = c2.number_input("引退後の月々の生活費（円）", 0, 2_000_000, 300_000, 10_000, format="%d")
+    # ── タブで法人／個人を分ける ──
+    tab_corp, tab_personal = st.tabs(["🏢 法人の情報", "👤 個人の情報"])
 
-    st.divider()
+    # ════════════════════════════════
+    # 🏢 法人タブ
+    # ════════════════════════════════
+    with tab_corp:
+        st.markdown("#### 💼 役員報酬・在任年数")
+        c1, c2 = st.columns(2)
+        last_salary       = c1.number_input("最終報酬月額（円）", 0, 5_000_000, 1_000_000, 50_000,
+                                             format="%d", help="功績倍率方式の役員退職金計算に使います。")
+        years_as_director = c2.number_input("役員在任年数（引退時点）", 1, 50,
+                                             int(retire_age - current_age + 10), 1)
 
-    # ── 法人保険（複数件） ──
-    st.markdown("#### 🏦 法人保険（最大10件）")
+        st.divider()
 
-    col_add, col_del, _ = st.columns([1, 1, 5])
-    if col_add.button("➕ 保険を追加", disabled=st.session_state["num_policies"] >= 10):
-        st.session_state["num_policies"] += 1
-        st.rerun()
-    if col_del.button("➖ 保険を削除", disabled=st.session_state["num_policies"] <= 1):
-        st.session_state["num_policies"] -= 1
-        st.rerun()
+        # 法人保険
+        st.markdown("#### 🏦 法人保険（最大10件）")
+        col_add, col_del, _ = st.columns([1, 1, 5])
+        if col_add.button("➕ 保険を追加", disabled=st.session_state["num_policies"] >= 10):
+            st.session_state["num_policies"] += 1
+            st.rerun()
+        if col_del.button("➖ 保険を削除", disabled=st.session_state["num_policies"] <= 1):
+            st.session_state["num_policies"] -= 1
+            st.rerun()
 
-    policies = []
-    for i in range(st.session_state["num_policies"]):
-        st.markdown(f'<div class="ins-header">保険 {i+1}</div>', unsafe_allow_html=True)
-        with st.container():
-            c1, c2 = st.columns([2, 5])
-            ins_name = c1.text_input("保険名", value=f"終身保険{i+1}", key=f"ins_name_{i}")
-            ins_type = c2.selectbox("種類", INSURANCE_TYPES, key=f"ins_type_{i}")
+        policies = []
+        for i in range(st.session_state["num_policies"]):
+            st.markdown(f'<div class="ins-header">保険 {i+1}</div>', unsafe_allow_html=True)
+            with st.container():
+                c1, c2 = st.columns([2, 5])
+                ins_name = c1.text_input("保険名", value=f"終身保険{i+1}", key=f"ins_name_{i}")
+                ins_type = c2.selectbox("種類", INSURANCE_TYPES, key=f"ins_type_{i}")
 
-            c1, c2, c3, c4 = st.columns(4)
-            ins_monthly = c1.number_input("月額保険料（円）", 0, 5_000_000, 200_000, 10_000,
-                                          format="%d", key=f"ins_m_{i}")
-            ins_years   = c2.number_input("払込年数", 1, 40, int(retire_age - current_age), 1,
-                                          key=f"ins_y_{i}")
-            ins_rate    = c3.number_input("解約返戻率（%）", 0.0, 120.0, 90.0, 1.0,
-                                          key=f"ins_r_{i}",
-                                          help="引退時点での解約返戻率（保険設計書で確認）")
-            ins_death   = c4.number_input("死亡保険金（万円）", 0, 100_000, 10_000, 500,
-                                          format="%d", key=f"ins_d_{i}") * 10_000
+                c1, c2, c3, c4 = st.columns(4)
+                ins_monthly = c1.number_input("月額保険料（円）", 0, 5_000_000, 200_000, 10_000,
+                                              format="%d", key=f"ins_m_{i}")
+                ins_years   = c2.number_input("払込年数", 1, 40, int(retire_age - current_age), 1,
+                                              key=f"ins_y_{i}")
+                ins_rate    = c3.number_input("解約返戻率（%）", 0.0, 120.0, 90.0, 1.0,
+                                              key=f"ins_r_{i}",
+                                              help="引退時点での解約返戻率（保険設計書で確認）")
+                ins_death   = c4.number_input("死亡保険金（万円）", 0, 100_000, 10_000, 500,
+                                              format="%d", key=f"ins_d_{i}") * 10_000
 
-            ins_exit = st.radio(
-                "出口戦略",
-                EXIT_OPTIONS,
-                key=f"ins_exit_{i}",
-                horizontal=True,
-                help="① 解約して退職金に / ② 個人に名義変更して継続 / ③ 後継者に承継",
-            )
-            st.caption(f"💡 {EXIT_NOTES[ins_exit]}")
+                ins_exit = st.radio("出口戦略", EXIT_OPTIONS, key=f"ins_exit_{i}",
+                                    horizontal=True,
+                                    help="① 解約して退職金に / ② 個人に名義変更して継続 / ③ 後継者に承継")
+                st.caption(f"💡 {EXIT_NOTES[ins_exit]}")
 
-            result = calc_insurance(ins_monthly, ins_years, ins_rate, ins_death)
-            mc1, mc2, mc3 = st.columns(3)
-            mc1.metric("保険料総額", f"{result['保険料総額']/10000:,.0f}万円")
-            mc2.metric("解約返戻金（概算）", f"{result['解約返戻金（概算）']/10000:,.0f}万円")
-            mc3.metric("死亡保険金", f"{ins_death/10000:,.0f}万円")
+                result = calc_insurance(ins_monthly, ins_years, ins_rate, ins_death)
+                mc1, mc2, mc3 = st.columns(3)
+                mc1.metric("保険料総額", f"{result['保険料総額']/10000:,.0f}万円")
+                mc2.metric("解約返戻金（概算）", f"{result['解約返戻金（概算）']/10000:,.0f}万円")
+                mc3.metric("死亡保険金", f"{ins_death/10000:,.0f}万円")
 
-            policies.append({
-                "名称": ins_name,
-                "種類": ins_type,
-                "月額": ins_monthly,
-                "払込年数": ins_years,
-                "返戻率": ins_rate,
-                "解約返戻金": result["解約返戻金（概算）"],
-                "死亡保険金": ins_death,
-                "保険料総額": result["保険料総額"],
-                "節税総額": result["節税総額（概算）"],
-                "年間節税額": result["年間節税額（概算）"],
-                "出口戦略": ins_exit,
-            })
+                policies.append({
+                    "名称": ins_name, "種類": ins_type, "月額": ins_monthly,
+                    "払込年数": ins_years, "返戻率": ins_rate,
+                    "解約返戻金": result["解約返戻金（概算）"],
+                    "死亡保険金": ins_death,
+                    "保険料総額": result["保険料総額"],
+                    "節税総額": result["節税総額（概算）"],
+                    "年間節税額": result["年間節税額（概算）"],
+                    "出口戦略": ins_exit,
+                })
+            if i < st.session_state["num_policies"] - 1:
+                st.markdown("<hr style='border:1px dashed #c5d8f5; margin:8px 0;'>", unsafe_allow_html=True)
 
-        if i < st.session_state["num_policies"] - 1:
-            st.markdown("<hr style='border:1px dashed #c5d8f5; margin:8px 0;'>", unsafe_allow_html=True)
+        st.divider()
 
-    st.divider()
+        # 小規模企業共済
+        st.markdown("#### 🏛️ 小規模企業共済")
+        c1, c2 = st.columns(2)
+        kyosai_monthly = c1.number_input("掛金月額（円）※最大70,000円", 0, 70_000, 70_000, 1_000, format="%d")
+        kyosai_years   = c2.number_input("加入年数（引退時点）", 0, 45, int(retire_age - current_age), 1,
+                                          key="kyosai_y")
 
-    # ── 小規模企業共済 ──
-    st.markdown("#### 🏛️ 小規模企業共済")
-    c1, c2 = st.columns(2)
-    kyosai_monthly = c1.number_input("掛金月額（円）※最大70,000円", 0, 70_000, 70_000, 1_000, format="%d")
-    kyosai_years   = c2.number_input("加入年数（引退時点）", 0, 45, int(retire_age - current_age), 1,
-                                      key="kyosai_y")
+        st.divider()
 
-    st.divider()
-
-    # ── iDeCo ──
-    st.markdown("#### 📈 iDeCo（個人型確定拠出年金）")
-    c1, c2, c3 = st.columns(3)
-    ideco_monthly = c1.number_input("掛金月額（円）※経営者最大23,000円", 0, 23_000, 23_000, 1_000, format="%d")
-    ideco_years   = c2.number_input("加入年数（引退時点）", 0, 40, int(retire_age - current_age), 1,
-                                     key="ideco_y")
-    ideco_return  = c3.number_input("想定運用利率（%）", 0.0, 10.0, 3.0, 0.5)
-
-    st.divider()
-
-    # ── NISA ──
-    st.markdown("#### 📊 NISA（新NISA）")
-    st.caption("新NISAは年間360万円（つみたて投資枠120万円＋成長投資枠240万円）まで非課税で投資可能。運用益・売却益が永久非課税。")
-    c1, c2, c3, c4 = st.columns(4)
-    nisa_monthly = c1.number_input(
-        "月額積立（円）", 0, 300_000, 100_000, 10_000, format="%d",
-        help="新NISAの月額積立額。年間上限：つみたて枠10万円＋成長投資枠20万円＝最大30万円/月"
-    )
-    nisa_years = c2.number_input(
-        "積立年数", 0, 40, int(retire_age - current_age), 1, key="nisa_y"
-    )
-    nisa_return = c3.number_input(
-        "想定運用利率（%）", 0.0, 15.0, 5.0, 0.5,
-        help="長期の株式インデックス投資の平均リターンは年3〜7%程度が目安です。"
-    )
-    nisa_type = c4.selectbox(
-        "主な投資枠",
-        ["つみたて投資枠", "成長投資枠", "両方（併用）"],
-        help="つみたて投資枠：年120万円上限・長期分散向け投信のみ。成長投資枠：年240万円上限・株式・投信等幅広く対応。"
-    )
-
-    st.divider()
-
-    # ── 役員退職金 ──
-    st.markdown("#### 🏆 役員退職金の設計（功績倍率方式）")
-    c1, c2 = st.columns(2)
-    multiplier = c1.number_input("功績倍率", 0.5, 3.0, 2.0, 0.1,
-                                  help="代表取締役：2.0〜3.0倍、取締役：1.5〜2.0倍が目安")
-    yakuin_amount = calc_yakuin(last_salary, years_as_director, multiplier)
-    c2.markdown(f"""
+        # 役員退職金
+        st.markdown("#### 🏆 役員退職金の設計（功績倍率方式）")
+        c1, c2 = st.columns(2)
+        multiplier    = c1.number_input("功績倍率", 0.5, 3.0, 2.0, 0.1,
+                                         help="代表取締役：2.0〜3.0倍、取締役：1.5〜2.0倍が目安")
+        yakuin_amount = calc_yakuin(last_salary, years_as_director, multiplier)
+        c2.markdown(f"""
 <div style="background:#eef4ff;border-radius:8px;padding:12px 16px;margin-top:8px;">
 役員退職金の適正額（目安）<br>
 <strong style="font-size:1.3rem;">{yakuin_amount/10000:,.0f}万円</strong><br>
@@ -338,10 +299,45 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
 </div>
 """, unsafe_allow_html=True)
 
-    st.divider()
+    # ════════════════════════════════
+    # 👤 個人タブ
+    # ════════════════════════════════
+    with tab_personal:
 
-    # ── 預貯金 ──
-    st.markdown("#### 🏧 預貯金・現金資産")
+        # 公的年金・生活費
+        st.markdown("#### 💴 公的年金・生活費")
+        c1, c2 = st.columns(2)
+        monthly_pension = c1.number_input("公的年金 月額（円）", 0, 500_000, 150_000, 5_000, format="%d")
+        monthly_expense = c2.number_input("引退後の月々の生活費（円）", 0, 2_000_000, 300_000, 10_000, format="%d")
+
+        st.divider()
+
+        # iDeCo
+        st.markdown("#### 📈 iDeCo（個人型確定拠出年金）")
+        c1, c2, c3 = st.columns(3)
+        ideco_monthly = c1.number_input("掛金月額（円）※経営者最大23,000円", 0, 23_000, 23_000, 1_000, format="%d")
+        ideco_years   = c2.number_input("加入年数（引退時点）", 0, 40, int(retire_age - current_age), 1,
+                                         key="ideco_y")
+        ideco_return  = c3.number_input("想定運用利率（%）", 0.0, 10.0, 3.0, 0.5)
+
+        st.divider()
+
+        # NISA
+        st.markdown("#### 📊 NISA（新NISA）")
+        st.caption("年間360万円まで非課税で投資可能。運用益・売却益が永久非課税。")
+        c1, c2, c3, c4 = st.columns(4)
+        nisa_monthly = c1.number_input("月額積立（円）", 0, 300_000, 100_000, 10_000, format="%d",
+                                        help="最大30万円/月（年360万円）")
+        nisa_years   = c2.number_input("積立年数", 0, 40, int(retire_age - current_age), 1, key="nisa_y")
+        nisa_return  = c3.number_input("想定運用利率（%）", 0.0, 15.0, 5.0, 0.5,
+                                        help="長期インデックス投資の目安：年3〜7%")
+        nisa_type    = c4.selectbox("主な投資枠",
+                                     ["つみたて投資枠", "成長投資枠", "両方（併用）"])
+
+        st.divider()
+
+        # 預貯金
+        st.markdown("#### 🏧 預貯金・現金資産")
     st.caption("現在の預貯金残高と、引退までの年間積立額を入力してください。")
     c1, c2, c3 = st.columns(3)
     savings_current = c1.number_input(

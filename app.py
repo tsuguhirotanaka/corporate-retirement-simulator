@@ -343,17 +343,31 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
                                     help="① 解約して退職金に / ② 個人に名義変更して継続 / ③ 後継者に承継")
                 st.caption(f"💡 {EXIT_NOTES[ins_exit]}")
 
+                # 死亡保険金の受取人（②現物支給・③後継者の場合に表示）
+                if ins_exit in [EXIT_OPTIONS[1], EXIT_OPTIONS[2]]:
+                    c1, c2 = st.columns([3, 4])
+                    ins_beneficiary = c1.text_input(
+                        "死亡保険金の受取人",
+                        value="配偶者" if ins_exit == EXIT_OPTIONS[1] else "後継者",
+                        key=f"ins_ben_{i}",
+                        help="万が一の際に死亡保険金を受け取る方。②は個人継続なので本人の遺族、③は後継者など。"
+                    )
+                else:
+                    ins_beneficiary = "法人"
+
                 result = calc_insurance(ins_monthly, ins_years, ins_rate, ins_death)
-                mc1, mc2, mc3 = st.columns(3)
+                mc1, mc2, mc3, mc4 = st.columns(4)
                 mc1.metric("保険料総額", f"{result['保険料総額']/10000:,.0f}万円")
                 mc2.metric("解約返戻金（概算）", f"{result['解約返戻金（概算）']/10000:,.0f}万円")
                 mc3.metric("死亡保険金", f"{ins_death/10000:,.0f}万円")
+                mc4.metric("死亡保険金 受取人", ins_beneficiary)
 
                 policies.append({
                     "名称": ins_name, "種類": ins_type, "月額": ins_monthly,
                     "払込年数": ins_years, "返戻率": ins_rate,
                     "解約返戻金": result["解約返戻金（概算）"],
                     "死亡保険金": ins_death,
+                    "受取人": ins_beneficiary,
                     "保険料総額": result["保険料総額"],
                     "節税総額": result["節税総額（概算）"],
                     "年間節税額": result["年間節税額（概算）"],
@@ -508,17 +522,24 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
 </div>""", unsafe_allow_html=True)
 
             elif pins_exit == "🛡️ 死亡保険金として遺族・相続に残す":
-                c1, c2 = st.columns(2)
+                c1, c2, c3 = st.columns(3)
                 pins_death = c1.number_input(
                     "死亡保険金額（万円）", 0, 100_000, 1_000, 100,
                     format="%d", key=f"pins_recv_{i}",
                     help="万が一の際に受け取れる死亡保険金額。"
                 ) * 10_000
+                pins_beneficiary = c2.text_input(
+                    "受取人（保険金を残す相手）",
+                    value="配偶者",
+                    key=f"pins_ben_{i}",
+                    help="例：配偶者、長男、会社（法人）など。受取人によって税務上の扱いが変わります。"
+                )
                 pins_receive = 0
                 pins_monthly_annuity = 0
-                c2.markdown(f"""
-<div style="background:#fff0f0;border-radius:8px;padding:10px 14px;margin-top:8px;">
-相続・遺族への資産：<strong>{pins_death/10000:,.0f}万円</strong>
+                c3.markdown(f"""
+<div style="background:#fff0f0;border-radius:8px;padding:10px 14px;margin-top:22px;">
+受取人：<strong>{pins_beneficiary}</strong><br>
+保険金額：<strong>{pins_death/10000:,.0f}万円</strong>
 </div>""", unsafe_allow_html=True)
 
             else:  # 個人年金として毎月受け取る
@@ -541,6 +562,7 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
                 "使い方": pins_exit,
                 "受取見込額（老後資金）": pins_receive,
                 "死亡保険金": pins_death,
+                "受取人": pins_beneficiary if "死亡" in pins_exit else "−",
                 "年金月額": pins_monthly_annuity,
             })
             if i < st.session_state["num_personal_ins"] - 1:
@@ -664,7 +686,8 @@ padding:10px 18px;font-size:1.1rem;font-weight:bold;margin-bottom:16px;">
 <div style="background:{color};border-radius:8px;padding:10px 14px;margin:6px 0;">
   <strong>{p['名称']}</strong>（{p['種類']}）<br>
   解約返戻金：<strong>{p['解約返戻金']/10000:,.0f}万円</strong>
-  死亡保険金：<strong>{p['死亡保険金']/10000:,.0f}万円</strong><br>
+  死亡保険金：<strong>{p['死亡保険金']/10000:,.0f}万円</strong>
+  {"　→ 受取人：<strong>" + p['受取人'] + "</strong>" if p['受取人'] != "法人" else ""}<br>
   <span style="font-size:0.85rem;color:#555;">{p['出口戦略']}</span>
 </div>
 """, unsafe_allow_html=True)
@@ -765,7 +788,8 @@ padding:10px 18px;font-size:1.1rem;font-weight:bold;margin-bottom:16px;">
             if "解約" in p["使い方"]:
                 color, badge = "#f0fdf4", f"老後資金：{p['受取見込額（老後資金）']/10000:,.0f}万円"
             elif "死亡" in p["使い方"]:
-                color, badge = "#fff0f0", f"死亡保険金：{p['死亡保険金']/10000:,.0f}万円"
+                color = "#fff0f0"
+                badge = f"死亡保険金：{p['死亡保険金']/10000:,.0f}万円　受取人：{p['受取人']}"
             else:
                 color, badge = "#f0f4ff", f"年金月額：{p['年金月額']:,}円／月"
             st.markdown(f"""

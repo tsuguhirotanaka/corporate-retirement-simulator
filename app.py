@@ -338,70 +338,68 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
 
         # 預貯金
         st.markdown("#### 🏧 預貯金・現金資産")
-    st.caption("現在の預貯金残高と、引退までの年間積立額を入力してください。")
-    c1, c2, c3 = st.columns(3)
-    savings_current = c1.number_input(
-        "現在の預貯金残高（万円）", 0, 100_000, 1_000, 100, format="%d",
-        help="個人・法人問わず、老後に使える預貯金の合計。"
-    ) * 10_000
-    savings_annual  = c2.number_input(
-        "引退まで毎年の積立額（万円）", 0, 10_000, 100, 50, format="%d",
-        help="給与や役員報酬から毎年貯蓄できる金額の目安。"
-    ) * 10_000
-    savings_years   = c3.number_input(
-        "積立年数", 0, 40, int(retire_age - current_age), 1, key="sav_y"
-    )
-
-    st.divider()
-
-    # ── 個人保険 ──
-    st.markdown("#### 🧑 個人で契約している保険")
-    st.caption("個人名義の生命保険・個人年金保険などの解約返戻金・満期金を入力してください。")
-
-    if "num_personal_ins" not in st.session_state:
-        st.session_state["num_personal_ins"] = 1
-
-    pc1, pc2, _ = st.columns([1, 1, 5])
-    if pc1.button("➕ 追加", key="add_pins", disabled=st.session_state["num_personal_ins"] >= 5):
-        st.session_state["num_personal_ins"] += 1
-        st.rerun()
-    if pc2.button("➖ 削除", key="del_pins", disabled=st.session_state["num_personal_ins"] <= 1):
-        st.session_state["num_personal_ins"] -= 1
-        st.rerun()
-
-    personal_policies = []
-    personal_ins_types = ["終身保険（個人）", "個人年金保険", "養老保険", "学資保険", "その他"]
-    for i in range(st.session_state["num_personal_ins"]):
-        st.markdown(f'<div class="ins-header">個人保険 {i+1}</div>', unsafe_allow_html=True)
-        c1, c2, c3, c4 = st.columns(4)
-        pins_name    = c1.text_input("保険名", value=f"個人保険{i+1}", key=f"pins_name_{i}")
-        pins_type    = c2.selectbox("種類", personal_ins_types, key=f"pins_type_{i}")
-        pins_receive = c3.number_input(
-            "引退時の受取見込額（万円）", 0, 100_000, 500, 100,
-            format="%d", key=f"pins_recv_{i}",
-            help="解約返戻金・満期金・個人年金の一時金受取額の見込み。"
+        st.caption("現在の預貯金残高と、引退までの年間積立額を入力してください。")
+        c1, c2, c3 = st.columns(3)
+        savings_current = c1.number_input(
+            "現在の預貯金残高（万円）", 0, 100_000, 1_000, 100, format="%d",
+            help="老後に使える預貯金の合計。"
         ) * 10_000
-        pins_monthly_annuity = c4.number_input(
-            "年金月額（円）※年金型の場合", 0, 500_000, 0, 10_000,
-            format="%d", key=f"pins_ann_{i}",
-            help="個人年金保険など月々受け取る場合の月額。一時金の場合は0。"
+        savings_annual  = c2.number_input(
+            "引退まで毎年の積立額（万円）", 0, 10_000, 100, 50, format="%d",
+        ) * 10_000
+        savings_years   = c3.number_input(
+            "積立年数", 0, 40, int(retire_age - current_age), 1, key="sav_y"
         )
-        personal_policies.append({
-            "名称": pins_name,
-            "種類": pins_type,
-            "受取見込額": pins_receive,
-            "年金月額": pins_monthly_annuity,
-        })
-        if i < st.session_state["num_personal_ins"] - 1:
-            st.markdown("<hr style='border:1px dashed #c5d8f5; margin:8px 0;'>", unsafe_allow_html=True)
 
+        st.divider()
+
+        # 個人保険
+        st.markdown("#### 🧑 個人で契約している保険")
+        st.caption("個人名義の生命保険・個人年金保険などの解約返戻金・満期金を入力してください。")
+
+        if "num_personal_ins" not in st.session_state:
+            st.session_state["num_personal_ins"] = 1
+
+        pc1, pc2, _ = st.columns([1, 1, 5])
+        if pc1.button("➕ 追加", key="add_pins", disabled=st.session_state["num_personal_ins"] >= 5):
+            st.session_state["num_personal_ins"] += 1
+            st.rerun()
+        if pc2.button("➖ 削除", key="del_pins", disabled=st.session_state["num_personal_ins"] <= 1):
+            st.session_state["num_personal_ins"] -= 1
+            st.rerun()
+
+        personal_policies = []
+        personal_ins_types = ["終身保険（個人）", "個人年金保険", "養老保険", "学資保険", "その他"]
+        for i in range(st.session_state["num_personal_ins"]):
+            st.markdown(f'<div class="ins-header">個人保険 {i+1}</div>', unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns(4)
+            pins_name    = c1.text_input("保険名", value=f"個人保険{i+1}", key=f"pins_name_{i}")
+            pins_type    = c2.selectbox("種類", personal_ins_types, key=f"pins_type_{i}")
+            pins_receive = c3.number_input(
+                "引退時の受取見込額（万円）", 0, 100_000, 500, 100,
+                format="%d", key=f"pins_recv_{i}",
+                help="解約返戻金・満期金・個人年金の一時金受取額の見込み。"
+            ) * 10_000
+            pins_monthly_annuity = c4.number_input(
+                "年金月額（円）※年金型の場合", 0, 500_000, 0, 10_000,
+                format="%d", key=f"pins_ann_{i}",
+                help="個人年金保険など月々受け取る場合の月額。一時金の場合は0。"
+            )
+            personal_policies.append({
+                "名称": pins_name,
+                "種類": pins_type,
+                "受取見込額": pins_receive,
+                "年金月額": pins_monthly_annuity,
+            })
+            if i < st.session_state["num_personal_ins"] - 1:
+                st.markdown("<hr style='border:1px dashed #c5d8f5; margin:8px 0;'>", unsafe_allow_html=True)
+
+    # タブの外：理想設定＋実行ボタン
     st.divider()
-
-    # ── 理想設定 ──
     st.markdown("#### 🎯 理想の老後設定")
     c1, c2 = st.columns(2)
-    ideal_monthly  = c1.number_input("引退後に欲しい月収（円）", 0, 2_000_000, 500_000, 10_000, format="%d")
-    ideal_asset    = c2.number_input("死亡時に残したい資産（万円）", 0, 100_000, 3_000, 500, format="%d") * 10_000
+    ideal_monthly = c1.number_input("引退後に欲しい月収（円）", 0, 2_000_000, 500_000, 10_000, format="%d")
+    ideal_asset   = c2.number_input("死亡時に残したい資産（万円）", 0, 100_000, 3_000, 500, format="%d") * 10_000
 
     st.divider()
     run_btn = st.button("🔍 シミュレーション実行", type="primary", use_container_width=True)
